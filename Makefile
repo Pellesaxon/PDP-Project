@@ -14,15 +14,12 @@ clean:
 	$(RM) output_test.txt
 	$(RM) testoutput.txt
 
-test: shearsort
-	mpirun -np 1 ./shearsort input/input15.txt testoutput.txt
 
-# test: quicksort
-# 	mpirun -np 1 ./quicksort input10.txt testoutput.txt 1
-# 	mpirun -np 2 ./quicksort input10.txt testoutput.txt 1
-# 	mpirun -np 2 ./quicksort input10.txt testoutput.txt 2
-# 	mpirun -np 2 ./quicksort input10.txt testoutput.txt 3
-# 	mpirun -np 4 ./quicksort input10test.txt testoutput.txt 1
-# 	mpirun -np 4 ./quicksort input10test.txt testoutput.txt 2
-# 	mpirun -np 4 ./quicksort input10test.txt testoutput.txt 3
+run: shearsort
+	mpirun -np 1 ./shearsort input/input16.txt testoutput16.txt
+
+test: shearsort
+	mpirun -np 1 ./shearsort input/input15.txt testoutput15.txt
+	mpirun -np 1 ./shearsort input/input16.txt testoutput16.txt
+
 
