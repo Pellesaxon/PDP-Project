@@ -16,8 +16,7 @@ int main(int argc, char **argv) {
 	MPI_Comm_size(MPI_COMM_WORLD, &num_proc);
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
-    matrix2D matrix_A;
-    std::vector<int> rowDistribution;
+    squareMatrix matrix_A;
 
     if (myid == ROOT){
         if (DDBUG){
@@ -25,17 +24,15 @@ int main(int argc, char **argv) {
         }
         matrix_A = read_input(input_name);
         
-        if (matrix_A.n <= 0){
+        if (matrix_A.d <= 0){
             printf("Unable to read input file or dimension < 1\n");
             return 1;
         }
-
-
     }
 
     // TODO: Divide rows and colls evenly 
     // TODO: Setup local data
-    int dim = matrix_A.nrOfCols;
+    int dim = matrix_A.d;
     int col_steps = ceil(log2(dim));
     int row_steps = col_steps + 1; 
 
@@ -48,13 +45,13 @@ int main(int argc, char **argv) {
                 if (DDBUG){
                     std::cout << myid << ": " << "Sorting even row" << std::endl;
                 }
-                std::sort(matrix_A.data.begin() + matrix_A.nrOfCols * row, matrix_A.data.begin() + matrix_A.nrOfCols * (row+1));
+                std::sort(matrix_A.data.begin() + matrix_A.d * row, matrix_A.data.begin() + matrix_A.d * (row+1));
             }
             else {
                 if (DDBUG){
                     std::cout << myid << ": " << "Sorting odd row" << std::endl;
                 }
-                std::sort(matrix_A.data.begin() + matrix_A.nrOfCols * row, matrix_A.data.begin() + matrix_A.nrOfCols * (row+1), std::greater<int>());
+                std::sort(matrix_A.data.begin() + matrix_A.d * row, matrix_A.data.begin() + matrix_A.d * (row+1), std::greater<int>());
             }
         }
 
@@ -94,62 +91,10 @@ int main(int argc, char **argv) {
 
 }
 
-matrix2D distribute_from_root(matrix2D all_elements){
-	int num_proc, myid;
-	MPI_Comm_size(MPI_COMM_WORLD, &num_proc);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-
-    std::vector<int> rowcount(num_proc); // How many rows per rank
-	std::vector<int> sendcounts(num_proc); // How many elements per rank
-    std::vector<int> displs(num_proc);     // Displacement (starting index) for each rank
-
-    if (myid == ROOT) {
-        int nrOfRows = all_elements.nrOfRows();
-        int nrOfCols = all_elements.nrOfCols();
-
-		for (int i = 0; i < num_proc; ++i) {
-			rowcount[i] = nrOfRows / num_proc + (i < nrOfRows % num_proc ? 1 : 0);
-		}
-
-        for (int i = 0; i < num_proc; ++i) {
-			sendcounts[i] = rowcount[i] * nrOfCols;
-		}
-
-		displs[0] = 0;
-        for (int i = 1; i < num_proc; ++i) {
-            displs[i] = displs[i - 1] + sendcounts[i - 1];
-        }
-	}
-
-	if (DDBUG) {
-		printf("PROCESS %d Before rows and sendcount scatter \n", myid);
-	}
-
-    // TODO: Scatter local rows, local cols and sendcount together
-
-    int local_rows = 0;
-	MPI_Scatter(rowcount.data(), 1, MPI_INT, &local_rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-	int local_size = 0;
-	MPI_Scatter(sendcounts.data(), 1, MPI_INT, &local_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-
-	if (DDBUG) {
-		printf("PROCESS %d Before scatterv \n", myid);
-	}
-
-    matrix2D local_matrix = matrix2D()
-
-	MPI_Scatterv(all_elements.data.data(), sendcounts.data(), displs.data(), MPI_INT,
-				 my_elements, local_size, MPI_INT,
-				 0, MPI_COMM_WORLD);
-				 
-	return local_size;
-}
 
 
 // Based on functions from previous assignments
-matrix2D read_input(char *file_name) {
+squareMatrix read_input(char *file_name) {
     std::ifstream inputFile;
     inputFile.open(file_name);
 
@@ -170,7 +115,7 @@ matrix2D read_input(char *file_name) {
         std::cout << "Dim = " << dimensions << std::endl; // Print each word
     }
 
-    matrix2D elements = matrix2D(dimensions);
+    squareMatrix elements = squareMatrix(dimensions);
     
     int value;
     int x = 0, y = 0;
@@ -203,7 +148,7 @@ matrix2D read_input(char *file_name) {
 }
 
 // Based on functions from previous assignments
-int check_and_print(matrix2D *elements, char *file_name) {
+int check_and_print(squareMatrix *elements, char *file_name) {
 	sorted_snake(elements);
 
     if (OUTPUT){
@@ -218,7 +163,7 @@ int check_and_print(matrix2D *elements, char *file_name) {
         int i = 0;
         for (int value : elements->data){
             outputfile << std::to_string(value) << " ";
-            if ((i+1) % elements->nrOfCols == 0){
+            if ((i+1) % elements->d == 0){
                 outputfile << std::endl;
             }
             i++;
@@ -233,8 +178,8 @@ int check_and_print(matrix2D *elements, char *file_name) {
 }
 
 // Based on functions from previous assignments
-int sorted_snake(matrix2D *elements){
-    int dim = elements->nrOfCols;
+int sorted_snake(squareMatrix *elements){
+    int dim = elements->d;
     int prev = 0;
     
     if (DDBUG){
