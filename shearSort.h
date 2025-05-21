@@ -76,15 +76,24 @@ class matrix2D {
         }
         return c;
     }
+
+    // Resize matrix similar to resize for vectors 
+    void resize(size_t rows, size_t columns) {
+        nrOfRows = rows;
+        nrOfCols = columns;
+        n = rows * columns;
+        data.resize(n);
+    }
 };
 
 /**
   * Distribute all rows from root to the other processes as evenly as
   * possible.
-  * @param elements Row-vise Matrix to distribute (Not significant in all processes)
-  * @return Number of elements received by the current process
+  * @param all_elements Row-vise Matrix to distribute (Not significant in all processes)
+  * @param local_elements Row-vise Matrix where local elements will be stored
+  * @return global index to first row received 
   */
- matrix2D distribute_from_root(matrix2D all_elements);
+ int distribute_from_root(matrix2D *all_elements, matrix2D *local_elements);
  
  /**
   * Gather elements from all processes on root. Put root's elements first and
@@ -97,8 +106,6 @@ class matrix2D {
  void gather_on_root(int *all_elements, int *my_elements, int local_n);
  
  /**
-  * @brief NOT USED / Implemented
-  * 
   * Perform the global part of parallel quick sort. This function assumes that
   * the elements is sorted within each node. When the function returns, all
   * elements owned by process i are smaller than or equal to all elements owned
@@ -118,9 +125,10 @@ class matrix2D {
  * stored in row-vise order. Nr of elements must be able to be evenly constructed
  * into a square matrix. 
  * @param file_name Name of input file
- * @return Populated matrix
+ * @param elements Pointer to matrix to populate
+ * @return Dimension of read matrix
  */
-matrix2D read_input(char *file_name);
+int read_input(char *file_name, matrix2D *elements);
 
 /**
  * Verify that elements are sorted in asending snake order. If not, write an error

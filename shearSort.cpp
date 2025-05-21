@@ -2,40 +2,43 @@
 
 
 int main(int argc, char **argv) {
-    int num_proc, myid;
+    int num_proc, myid, dim;
 
     if (3 != argc) {
 		printf("Usage: input_file output_file \n Amount of arguments submitted: %d\n", argc);
 		return 1;
 	}
 
+    // Read cmdline arguments
     char *input_name = argv[1];
 	char *output_name = argv[2];
 
+    // Setup MPI
     MPI_Init(&argc, &argv);
 	MPI_Comm_size(MPI_COMM_WORLD, &num_proc);
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
     matrix2D matrix_A;
-    std::vector<int> rowDistribution;
+    // std::vector<int> rowDistribution;
 
     if (myid == ROOT){
         if (DDBUG){
             std::cout << myid << ": " << "Reading input-file" << std::endl; // Print each word
         }
-        matrix_A = read_input(input_name);
+        dim = read_input(input_name, &matrix_A);
         
-        if (matrix_A.n <= 0){
+        if (dim <= 0){
             printf("Unable to read input file or dimension < 1\n");
             return 1;
         }
-
-
     }
 
-    // TODO: Divide rows and colls evenly 
-    // TODO: Setup local data
-    int dim = matrix_A.nrOfCols;
+    // Split up the elements on all processes
+    matrix2D local_matrix;
+    int first_row_index = distribute_from_root(&matrix_A, &local_matrix);
+
+
+    dim = matrix_A.nrOfCols;
     int col_steps = ceil(log2(dim));
     int row_steps = col_steps + 1; 
 
@@ -94,62 +97,86 @@ int main(int argc, char **argv) {
 
 }
 
-matrix2D distribute_from_root(matrix2D all_elements){
+int distribute_from_root(matrix2D *all_elements, matrix2D *local_elemets){
 	int num_proc, myid;
 	MPI_Comm_size(MPI_COMM_WORLD, &num_proc);
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
-    std::vector<int> rowcount(num_proc); // How many rows per rank
-	std::vector<int> sendcounts(num_proc); // How many elements per rank
-    std::vector<int> displs(num_proc);     // Displacement (starting index) for each rank
+    // Struct for mpi datatype to send all local data in one scatter call
+    struct LocalMatrixInfo{
+        int local_row_count; 
+        int column_count;
+        int local_row_index_start; 
+    } local_info;
+    
+    // MPI datatype that match LocalMatrixInfo
+    MPI_Datatype local_info_type;
+    MPI_Type_contiguous(3 , MPI_INT , &local_info_type);
+    MPI_Type_commit(&local_info_type);
+
+    // Init buffers used by ROOT 
+    std::vector<LocalMatrixInfo> local_info_array;
+    std::vector<int> sendcounts;
+    std::vector<int> displs;
 
     if (myid == ROOT) {
-        int nrOfRows = all_elements.nrOfRows();
-        int nrOfCols = all_elements.nrOfCols();
+        // Resize to avoid allocation of memory in all processes
+        local_info_array.resize(num_proc);
+        sendcounts.resize (num_proc);
+        displs.resize(num_proc);
 
-		for (int i = 0; i < num_proc; ++i) {
-			rowcount[i] = nrOfRows / num_proc + (i < nrOfRows % num_proc ? 1 : 0);
-		}
+        // Shall be equal as long as matrix is square
+        int nrOfRows = all_elements->nrOfRows;
+        int nrOfCols = all_elements->nrOfCols;
 
-        for (int i = 0; i < num_proc; ++i) {
-			sendcounts[i] = rowcount[i] * nrOfCols;
-		}
+        // Initialize first process info
+        local_info_array[0].local_row_count  = nrOfRows / num_proc + (0 < nrOfRows % num_proc ? 1 : 0);
+        local_info_array[0].column_count = nrOfCols;
+        local_info_array[0].local_row_index_start = 0;
 
-		displs[0] = 0;
-        for (int i = 1; i < num_proc; ++i) {
+        sendcounts[0] = local_info_array[0].local_row_count * nrOfCols;
+        displs[0] = 0;
+
+        // initilize the rest based on previous entries
+		for (int i = 1; i < num_proc; ++i) {
+            // Information to scatter
+            local_info_array[i].local_row_count  = nrOfRows / num_proc + (i < nrOfRows % num_proc ? 1 : 0);
+            local_info_array[i].column_count = nrOfCols;
+            local_info_array[i].local_row_index_start = local_info_array[i-1].local_row_index_start + local_info_array[i-1].local_row_count;
+
+            // ROOT LOCAL SEND INFORMATION 
+            sendcounts[i] = local_info_array[i].local_row_count * nrOfCols;
             displs[i] = displs[i - 1] + sendcounts[i - 1];
-        }
+		}
 	}
 
 	if (DDBUG) {
-		printf("PROCESS %d Before rows and sendcount scatter \n", myid);
+		printf("PROCESS %d Before LocalMatrixInfo scatter \n", myid);
 	}
 
-    // TODO: Scatter local rows, local cols and sendcount together
+    // Scatter the local info to each process
+	MPI_Scatter(local_info_array.data(), 1, local_info_type, &local_info, 1, local_info_type, ROOT, MPI_COMM_WORLD);
 
-    int local_rows = 0;
-	MPI_Scatter(rowcount.data(), 1, MPI_INT, &local_rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-	int local_size = 0;
-	MPI_Scatter(sendcounts.data(), 1, MPI_INT, &local_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
+    // Use local info to resize receive matrix
+    local_elemets->resize(local_info.local_row_count, local_info.column_count);
 
 	if (DDBUG) {
 		printf("PROCESS %d Before scatterv \n", myid);
 	}
 
-    matrix2D local_matrix = matrix2D()
-
-	MPI_Scatterv(all_elements.data.data(), sendcounts.data(), displs.data(), MPI_INT,
-				 my_elements, local_size, MPI_INT,
+    // Scatter rows to all processes
+	MPI_Scatterv(all_elements->data.data(), sendcounts.data(), displs.data(), MPI_INT,
+                 local_elemets->data.data(), local_elemets->n, MPI_INT,
 				 0, MPI_COMM_WORLD);
-				 
-	return local_size;
+	
+    MPI_Type_free(&local_info_type);
+
+	return (local_info.local_row_index_start);
 }
 
 
 // Based on functions from previous assignments
-matrix2D read_input(char *file_name) {
+int read_input(char *file_name, matrix2D *elements){
     std::ifstream inputFile;
     inputFile.open(file_name);
 
@@ -158,39 +185,38 @@ matrix2D read_input(char *file_name) {
 		return -2;
     }
 
-    int dimensions;
+    int dimension;
 
-    inputFile >> dimensions;
+    inputFile >> dimension;
     if (inputFile.fail()){
         perror("Couldn't read square matrix size from input file");
         return -2;
     }
 
     if (DDBUG){
-        std::cout << "Dim = " << dimensions << std::endl; // Print each word
+        std::cout << "Dim = " << dimension << std::endl; // Print each word
     }
 
-    matrix2D elements = matrix2D(dimensions);
-    
-    int value;
-    int x = 0, y = 0;
+    elements->resize(dimension, dimension);
 
-    while (inputFile >> value) {
-        if (x >= dimensions){
+    int x = 0, y = 0;
+    size_t readcount = 0;
+    while (inputFile >> (*elements)(x,y)) {
+        if (DDBUG){
+            // std::cout << value << " at location: " << x << ", " << y << "\t"; // Print each value
+            std::cout << (*elements)(x,y) << "\t"; // Print each value
+        }
+        
+        x++;
+        readcount++;
+        if (x >= dimension){
+            x = 0;
+            y++;
+
             if (DDBUG){
                 std::cout << std::endl; 
             }
-            x = 0;
-            y++;
         }
-
-        if (DDBUG){
-            // std::cout << value << " at location: " << x << ", " << y << "\t"; // Print each value
-            std::cout << value << "\t"; // Print each value
-        }
-
-        elements(x,y) = value;
-        x++;
     }
 
     if (DDBUG){
@@ -199,7 +225,17 @@ matrix2D read_input(char *file_name) {
 
     inputFile.close();
 
-	return elements;
+    if (DDBUG){
+        // std::cout << value << " at location: " << x << ", " << y << "\t"; // Print each value
+        std::cout << "readcount = "<< readcount << " and n = " << elements->n << std::endl; // Print each value
+    }
+
+    if (!(readcount == elements->n)){
+        perror("Too few arguments to fill matrix");
+        return -2;
+    }
+
+	return dimension;
 }
 
 // Based on functions from previous assignments
