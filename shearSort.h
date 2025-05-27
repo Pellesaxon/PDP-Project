@@ -92,7 +92,6 @@ class matrix2D {
  */
 int distribute_from_root(matrix2D *all_elements, matrix2D *local_elements);
 
-
 /**
  * Gather elements from all processes onto root. Put root's elements first and
  * thereafter elements from the other nodes in the order of their ranks (so that
@@ -108,28 +107,26 @@ void gather_on_root(matrix2D *all_elements, matrix2D *my_elements);
  * process i-1 and smaller than or equal to all elements owned by process i+1 and
  * elements in process i are sorted in snake order either starting with asending or 
  * desending order depending on first_row_index
- * 
  * @param elements Pointer to a matrix of values on the current node. Will point to a matrix with sorted elements when the function returns.
  * @param first_row_index Global index of the first row in local elements matrix used to decide rowsort order.
  */
 void global_sort(matrix2D *elements, int first_row_index);
 
-
 /**
- * Read problem size (dimension of matrix) and elements from the file whose name is given as an
- * argument to the function and populate elements accordingly. Elements will be
- * stored in row-vise order. Nr of elements must be able to be evenly constructed
- * into a square matrix. 
- * @param file_name Name of input file
+ * Read problem size (dimension of matrix) and generate elements or read problem size and 
+ * elements from the file whose name is given as an argument to the function and populate 
+ * elements accordingly. Elements will be stored in row-vise order. Nr of elements in
+ * file must be able to be evenly constructed into a square matrix. 
+ * @param size_or_file_name Dimension of square matrix or name of input file
  * @param elements Pointer to matrix to populate
  * @return Dimension of read matrix
  */
-int read_input(char *file_name, matrix2D *elements);
+int read_input(char *size_or_file_name, matrix2D *elements);
 
 /**
  * Verify that elements are sorted in asending snake order. If not, write an error
  * message to stdout. Thereafter, print all elements (in the order they are
- * stored) to a file named according to the last argument.
+ * stored) to a file named according to the last argument if output enabled.
  * @param elements Row-vise Matrix to check print
  * @param file_name Name of output file
  * @return 0 on success, -2 on I/O error

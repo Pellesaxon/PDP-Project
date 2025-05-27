@@ -73,14 +73,14 @@ int main(int argc, char **argv) {
 
 
 // Based on functions from previous assignments
-int read_input(char *file_name, matrix2D *elements){
+int read_input(char *size_or_file_name, matrix2D *elements){
     int dimension;
 
     // if filename is a number then create a matrix instead of reading it
     try 
     {
         std::size_t pos{};
-        dimension = std::stoi(file_name, &pos);
+        dimension = std::stoi(size_or_file_name, &pos);
 
         // allocate space for data
         elements->resize(dimension, dimension);
@@ -115,15 +115,14 @@ int read_input(char *file_name, matrix2D *elements){
     catch (std::invalid_argument const& ex) 
     {   
         if (DDBUG){
-            std::cout << "Input is not a number: " << file_name << std::endl;
+            std::cout << "Input is not a number: " << size_or_file_name << std::endl;
             std::cout << "Reading inputfile" << std::endl;
         }
     }
     
-
     // read file based on earlier assignments
     std::ifstream inputFile;
-    inputFile.open(file_name);
+    inputFile.open(size_or_file_name);
 
     if (!inputFile.is_open()) {
         perror("Couldn't open input file");
@@ -271,7 +270,7 @@ void global_sort(matrix2D *elements, int first_row_index) {
     std::vector<int> displs(num_proc);
 
     
-    // Find nr of rows/cols per proccess (same distribution both for rows and colls)
+    // Calculate nr of rows/cols per proccess (same distribution both for rows and colls)
     // Use to find displacement into first row. 
     rows_cols_per_proccess[0] = global_dim / num_proc + (0 < global_dim % num_proc ? 1 : 0);
     displs[0] = 0;
@@ -282,7 +281,7 @@ void global_sort(matrix2D *elements, int first_row_index) {
     }
 
 
-    // Create sendtypes per destination
+    // Create sendtypes per destination (as size vary)
     std::vector<MPI_Datatype> send_types(num_proc);
     for (int i = 0; i < num_proc; ++i) {
         MPI_Type_vector(                // Memory stencil for row send order
@@ -296,7 +295,7 @@ void global_sort(matrix2D *elements, int first_row_index) {
 
     // Create receive types per source which shall transpose the received data to simplify sorting
     MPI_Datatype column_vector;
-    MPI_Type_vector(                // Memory stencil for row send order
+    MPI_Type_vector(                // Memory stencil for column storage
         elements->nrOfRows,         // count
         1,                          // blocklength
         global_dim,                 // stride
@@ -308,8 +307,8 @@ void global_sort(matrix2D *elements, int first_row_index) {
     for (int i = 0; i < num_proc; ++i) {
         MPI_Type_create_hvector(        // Memory stencil for column receive order
             rows_cols_per_proccess[i],  // count
-            1,                          // blocklength
-            sizeof(MPI_INT),            // stride
+            1,                          // blocklength (each block is one column)
+            sizeof(MPI_INT),            // stride (to offset start of each column by one int)
             column_vector,              // basetype
             &recv_types[i]
         );
@@ -328,9 +327,10 @@ void global_sort(matrix2D *elements, int first_row_index) {
         send_counts[i] = 1;                             // just one vector type
         send_displs[i] = displs[i] * sizeof(MPI_INT);   // byte-offset as we use MPI_Alltoallw
         recv_counts[i] = 1;                             // just one contigious type
-        recv_displs[i] = displs[i] * sizeof(MPI_INT);                
+        recv_displs[i] = displs[i] * sizeof(MPI_INT);   // same displacement in send and receive             
     }
 
+    // Calculate nr of steps
     int col_steps = ceil(log2(global_dim));
     int row_steps = col_steps + 1; 
 
@@ -341,6 +341,8 @@ void global_sort(matrix2D *elements, int first_row_index) {
                 elements->toString();
             }
         }
+
+        // Sort rows asending/ desending
         for (int row = first_row_index; row < ((int)elements->nrOfRows + first_row_index); row++){
             if (row % 2 == 0){
                 if (DDBUG){
@@ -363,41 +365,8 @@ void global_sort(matrix2D *elements, int first_row_index) {
             }
         }
 
-        // if (i < col_steps){
-        //     // Transpose to treat columns as rows
-        //     MPI_Alltoallw(
-        //         MPI_IN_PLACE, send_counts.data(), send_displs.data(), send_types.data(),
-        //         elements->data.data(), recv_counts.data(), recv_displs.data(), recv_types.data(),
-        //         MPI_COMM_WORLD
-        //     );
-
-        //     if (DDBUG){
-        //         if (myid == ROOT){
-        //             std::cout << myid << ": " << "Before column sort" << std::endl; 
-        //             elements->toString();
-        //         }
-        //     }
-            
-        //     for (int col = 0; col < (int)elements->nrOfRows; col++){
-        //         std::sort(elements->data.begin() + global_dim * col,elements->data.begin() + global_dim * (col+1));
-        //     }
-
-        //     if (DDBUG){
-        //         if (myid == ROOT){
-        //             std::cout << myid << ": " << "Done with column sort" << std::endl; 
-        //             elements->toString();
-        //         }
-        //     }
-
-        //     // Transpose back to original layout
-        //     MPI_Alltoallw(
-        //         MPI_IN_PLACE, send_counts.data(), send_displs.data(), send_types.data(),
-        //         elements->data.data(), recv_counts.data(), recv_displs.data(), recv_types.data(),
-        //         MPI_COMM_WORLD
-        //     );
-        // }
-
         if (i < col_steps){
+            // Exchange and transpose matrix and then sort columns
             // Transpose to treat columns as rows
             MPI_Alltoallw(
                 elements->data.data(), send_counts.data(), send_displs.data(), send_types.data(),
