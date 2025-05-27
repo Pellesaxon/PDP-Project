@@ -4,9 +4,9 @@ BINS = shearsort
 
 all: $(BINS)
 
-shearsort: shearsort.h shearsort.cpp
+shearsort: shearSort.h shearSort.cpp
 	-ml gcc openmpi
-	$(CC) $(CFLAGS) -o $@ shearsort.cpp
+	$(CC) $(CFLAGS) -o $@ shearSort.cpp
 
 clean:
 	$(RM) $(BINS)
@@ -16,10 +16,10 @@ clean:
 
 
 run: shearsort
-	mpirun -np 1 ./shearsort input/input16.txt testoutput16.txt
+	mpirun -np 2 ./shearsort input/input8.txt testoutput8.txt
 
 test: shearsort
-	mpirun -np 1 ./shearsort input/input15.txt testoutput15.txt
-	mpirun -np 1 ./shearsort input/input16.txt testoutput16.txt
+	mpirun -np 2 ./shearsort input/input15.txt testoutput15.txt
+	mpirun -np 2 ./shearsort input/input16.txt testoutput16.txt
 
 
