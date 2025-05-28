@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
             std::cout << myid << ": " << "Checking output and writing output" << std::endl; // Print each word
         }
         check_and_print(&matrix_A, output_name);
-        std::cout << execution_time << std::endl;
+        std::cout << "TIME: " << execution_time << std::endl;
     } 
 
     MPI_Finalize();
@@ -284,13 +284,34 @@ void global_sort(matrix2D *elements, int first_row_index) {
     // Create sendtypes per destination (as size vary)
     std::vector<MPI_Datatype> send_types(num_proc);
     for (int i = 0; i < num_proc; ++i) {
+        // Create send vector
+        MPI_Datatype tmp_vector;
         MPI_Type_vector(                // Memory stencil for row send order
             elements->nrOfRows,         // count
             rows_cols_per_proccess[i],  // blocklength
             global_dim,                 // stride
             MPI_INT,                    // basetype
-            &send_types[i]);
+            &tmp_vector
+        );
+        MPI_Type_commit(&tmp_vector);
+
+        // Calculate actual size of datatype (needed as we use interleaved datatypes)
+        // https://rookiehpc.org/mpi/docs/mpi_type_create_resized/index.html
+        MPI_Aint true_size = (MPI_Aint)(elements->nrOfRows - 1) * global_dim * sizeof(int) + rows_cols_per_proccess[i] * sizeof(int);
+
+        MPI_Aint lb, ex;
+        MPI_Type_get_extent(tmp_vector, &lb, &ex);
+        std::cout << myid << ": " << "send lb: " << lb << "  send ex: " << ex << "  true_size: " << true_size<< std::endl;
+
+        MPI_Type_create_resized(
+            tmp_vector,         // MPI_Datatype old_datatype,
+            0,                  // MPI_Aint lower_bound,
+            true_size,          // MPI_Aint extent,
+            &send_types[i]      // MPI_Datatype* new_datatype);
+        );
+
         MPI_Type_commit(&send_types[i]);
+        MPI_Type_free(&tmp_vector);
     }
 
     // Create receive types per source which shall transpose the received data to simplify sorting
@@ -302,18 +323,40 @@ void global_sort(matrix2D *elements, int first_row_index) {
         MPI_INT,                    // basetype
         &column_vector);
     MPI_Type_commit(&column_vector);
+
+    MPI_Aint lb, ex;
+    MPI_Type_get_extent(column_vector, &lb, &ex);
+    std::cout << myid << ": " << "recv lb: " << lb << "  recv ex: " << ex << "  true_size: " << (elements->nrOfRows*sizeof(int))<< std::endl;
     
     std::vector<MPI_Datatype> recv_types(num_proc);
     for (int i = 0; i < num_proc; ++i) {
+        MPI_Datatype tmp_column;
         MPI_Type_create_hvector(        // Memory stencil for column receive order
             rows_cols_per_proccess[i],  // count
             1,                          // blocklength (each block is one column)
             sizeof(MPI_INT),            // stride (to offset start of each column by one int)
             column_vector,              // basetype
-            &recv_types[i]
+            &tmp_column
+        );
+        MPI_Type_commit(&tmp_column);
+
+        // Calculate actual size of datatype (needed as we use interleaved datatypes)
+        // https://rookiehpc.org/mpi/docs/mpi_type_create_resized/index.html
+        MPI_Aint true_size = (MPI_Aint)((elements->nrOfRows - 1) * global_dim + rows_cols_per_proccess[i]) * sizeof(int);
+        
+        MPI_Aint lb, ex;
+        MPI_Type_get_extent(tmp_column, &lb, &ex);
+        std::cout << myid << ": " << "recv lb: " << lb << "  recv ex: " << ex << "  true_size: " << true_size<< std::endl;
+
+        MPI_Type_create_resized(
+            tmp_column,         // MPI_Datatype old_datatype,
+            0,                  // MPI_Aint lower_bound,
+            true_size,          // MPI_Aint extent,
+            &recv_types[i]      // MPI_Datatype* new_datatype);
         );
 
         MPI_Type_commit(&recv_types[i]);
+        MPI_Type_free(&tmp_column);
     }
 
     // Setup remaining Alltoallw data

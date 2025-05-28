@@ -1,13 +1,14 @@
 #!/bin/bash 
 
-#SBATCH -A uppmax2025-2-247
+#SBATCH -M snowy
+#SBATCH -A uppmax2025-3-7
 #SBATCH -p node
 #SBATCH -n 16
 #SBATCH --time=01:00:00
 #SBATCH --error=job.weak.err
 #SBATCH --output=job.weak.out
 
-ml gcc openmpi
+ml gcc/14.2.0 openmpi/5.0.5
 
 processesArr=(1 4 9 16)
 inputArr=(2000 4000 6000 8000)
@@ -26,8 +27,11 @@ for (( i=0; i<length; i++ )); do
         # Run quicksort and capture its time output
         output=$(mpirun -np $process --bind-to none ./shearsort $input output_test.txt 2>&1)
         # Extract the numeric time
-        runtime=$(echo "$output" | grep -oP '\K[0-9]+\.[0-9]+' )
+        echo "${output}"
+        runtime=$(echo "$output" | grep -oP 'TIME: \K[0-9]+\.[0-9]+' )
         times+=("$runtime")
+        echo "${runtime}"
+        echo "${times[@]}"
     done
 
     # Compute median inline

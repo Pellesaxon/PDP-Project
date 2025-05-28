@@ -14,7 +14,7 @@
 #endif
 
 #ifndef OUTPUT
-	#define OUTPUT 0
+	#define OUTPUT 1
 #endif
 
 // Root node
