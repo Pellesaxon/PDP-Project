@@ -14,7 +14,7 @@
 #endif
 
 #ifndef OUTPUT
-	#define OUTPUT 1
+	#define OUTPUT 0
 #endif
 
 // Root node
@@ -39,15 +39,18 @@ class matrix2D {
 
     // operator overload for indexing into matrix
     int &operator()(size_t x, size_t y) {
-        if (x < 0 || x > nrOfCols || y < 0 || y > nrOfRows ){
-            throw std::out_of_range("Index out of range in squareMatrix");
-        }
+        // if (x >= nrOfRows || y >= nrOfCols){
+        //     throw std::out_of_range("Index out of range in squareMatrix");
+        // }
         return data[y*nrOfCols+x];
     }
     
     // To string method printing matrix
     void toString() {
-        for (size_t i = 0; i < n; i++){
+        if (DDBUG){
+            std::cout << "datavector size = " << data.size() << "  n = " << n << "  nrOfRows = " << nrOfRows << "  nrOfCols = " << nrOfCols << std::endl; // Print each value
+        }
+        for (size_t i = 0; i < data.size(); i++){
             if (i % nrOfCols == 0){
                 std::cout << std::endl; 
             }
@@ -57,10 +60,11 @@ class matrix2D {
     }
     
     // Get a copy of a row in matrix
-    std::vector<int> row(int row_index) {
-        std::vector<int> r(nrOfCols);
-        r.insert(r.begin(), data.begin() + (row_index * nrOfCols), data.begin() + (row_index * (nrOfCols + 1)));
-        return r;
+    std::vector<int> row(size_t row_index) {
+        if (row_index >= nrOfRows)
+            throw std::out_of_range("matrix2D::row(): row_index out of range");
+        auto start = data.begin() + row_index * nrOfCols;
+        return std::vector<int>(start, start + nrOfCols);
     }
 
     // Get a copy of a column in matrix
@@ -75,11 +79,11 @@ class matrix2D {
     }
 
     // Resize matrix similar to resize for vectors 
-    void resize(size_t rows, size_t columns) {
-        nrOfRows = rows;
-        nrOfCols = columns;
-        n        = rows * columns;
-        data.resize(n);
+    void resize(size_t new_rows, size_t new_columns) {
+        nrOfRows = new_rows;
+        nrOfCols = new_columns;
+        n        = new_rows * new_columns;
+        data.resize(new_rows * new_columns);
     }
 };
 
