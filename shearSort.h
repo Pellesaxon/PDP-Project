@@ -9,12 +9,14 @@
 #include <iostream>
 #include <fstream>
 
+// Enable/disable debug-prints
 #ifndef DDEBUG
 	#define DDBUG 0
 #endif
 
+// Enable/disable writing to outputfile  
 #ifndef OUTPUT
-	#define OUTPUT 0
+	#define OUTPUT 1
 #endif
 
 // Root node

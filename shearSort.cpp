@@ -20,7 +20,6 @@ int main(int argc, char **argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
     matrix2D matrix_A;
-    // std::vector<int> rowDistribution;
 
     if (myid == ROOT){
         if (DDBUG){
@@ -48,11 +47,9 @@ int main(int argc, char **argv) {
         }
     }
 
-
     global_sort(&local_matrix, first_row_index);
 
     gather_on_root(&matrix_A, &local_matrix);
-    
 
     if (myid == ROOT){
         // Stop timer
@@ -275,7 +272,7 @@ void global_sort(matrix2D *elements, int first_row_index) {
 
     
     // Calculate nr of rows/cols per proccess (same distribution both for rows and colls)
-    // Use to find displacement into first row. 
+    // Use to find displacement into first row and create send/recive datatypes. 
     rows_cols_per_proccess[0] = global_dim / num_proc + (0 < global_dim % num_proc ? 1 : 0);
     displs[0] = 0;
     
@@ -285,105 +282,83 @@ void global_sort(matrix2D *elements, int first_row_index) {
     }
 
 
-    // Create sendtypes per destination (as size vary)
+    // Create sendtypes per destination (as size may vary)
     std::vector<MPI_Datatype> send_types(num_proc);
     for (int i = 0; i < num_proc; ++i) {
-        // Create send vector
-        MPI_Datatype tmp_vector;
+        // Packs columns to send to each process
         MPI_Type_vector(                // Memory stencil for row send order
             elements->nrOfRows,         // count
             rows_cols_per_proccess[i],  // blocklength
             global_dim,                 // stride
             MPI_INT,                    // basetype
-            &tmp_vector
+            &send_types[i]
         );
-        MPI_Type_commit(&tmp_vector);
-
-        // Calculate actual size of datatype (needed as we use interleaved datatypes)
-        // https://rookiehpc.org/mpi/docs/mpi_type_create_resized/index.html
-        MPI_Aint extent = (MPI_Aint)(elements->nrOfRows - 1) * global_dim * sizeof(int) + rows_cols_per_proccess[i] * sizeof(int);
-
-        MPI_Aint lb, ex;
-        MPI_Type_get_true_extent(tmp_vector, &lb, &ex);
-        if (DDBUG && myid == ROOT){
-            std::cout << myid << ": " << "tmp_vector lb: " << lb << "  calculated extent: " << extent << "  true extent: " << extent << std::endl;
-            std::cout << myid << ": " << "tmp_vector type addrs: " << &tmp_vector << std::endl;
-        }
-
-        MPI_Type_create_resized(
-            tmp_vector,         // MPI_Datatype old_datatype,
-            0,                  // MPI_Aint lower_bound,
-            extent,             // MPI_Aint extent,
-            &send_types[i]      // MPI_Datatype* new_datatype);
-        );  
         MPI_Type_commit(&send_types[i]);
-
-        MPI_Type_get_true_extent(send_types[i], &lb, &ex);
         
         if (DDBUG && myid == ROOT){
+            MPI_Aint lb, extent;
+            MPI_Type_get_true_extent(send_types[i], &lb, &extent);
             std::cout << myid << ": " << "send lb: " << lb << "  send ex: " << extent << std::endl;
             std::cout << myid << ": " << "send type addrs: " << &send_types[i] << std::endl;
         }
-
-        MPI_Type_free(&tmp_vector);
     }
 
     // Create receive types per source which shall transpose the received data to simplify sorting
     MPI_Datatype column_vector;
-    MPI_Type_vector(                // Memory stencil for column storage
+    MPI_Type_vector(                // Memory stencil for column-vise storage
         elements->nrOfRows,         // count
         1,                          // blocklength
         global_dim,                 // stride
         MPI_INT,                    // basetype
         &column_vector);
     MPI_Type_commit(&column_vector);
-
-    MPI_Aint lb, ex, true_ex;
-    MPI_Type_get_true_extent(column_vector, &lb, &true_ex);
     
     if (DDBUG && myid == ROOT){
-        std::cout << myid << ": " << "col_vector lb: " << lb << "  calculated extent: " << sizeof(int) << "  col_vector true_size: " << true_ex << std::endl;
+        MPI_Aint lb, true_extent;
+        MPI_Type_get_true_extent(column_vector, &lb, &true_extent);
+        std::cout << myid << ": " << "col_vector lb: " << lb << "  calculated extent: " << sizeof(int) << "  col_vector true_extent: " << true_extent << std::endl;
         std::cout << myid << ": " << "col_vector addrs: " << &column_vector << std::endl;
     }
 
+    // Resize to actual extent of datatype (needed as I use interleaved datatypes)
+    // https://rookiehpc.org/mpi/docs/mpi_type_create_resized/index.html
     MPI_Datatype resized_column;
     MPI_Type_create_resized(
-        column_vector,      // MPI_Datatype old_datatype,
-        lb,                 // MPI_Aint lower_bound,
-        sizeof(int),        // MPI_Aint extent,
-        &resized_column      // MPI_Datatype* new_datatype);
+        column_vector,          // old_datatype,
+        0,                      // lower_bound,
+        sizeof(int),            // extent, (There is just one int between the start of one column and the next in recive buffer)
+        &resized_column         
     );
     MPI_Type_commit(&resized_column);
-    MPI_Type_get_true_extent(column_vector, &lb, &true_ex);
-    MPI_Type_get_extent(column_vector, &lb, &ex);
-
+    MPI_Type_free (&column_vector);
+    
     if (DDBUG && myid == ROOT){
-        std::cout << myid << ": " << "resized lb: " << lb << "  resized ex: " << ex << "  true_size: " << true_ex<< std::endl;
+        MPI_Aint lb, extent, true_extent;
+        MPI_Type_get_true_extent(resized_column, &lb, &true_extent);
+        MPI_Type_get_extent(resized_column, &lb, &extent);
+        std::cout << myid << ": " << "resized lb: " << lb << "  resized ex: " << extent << "  true_extent: " << true_extent<< std::endl;
         std::cout << myid << ": " << "resized addrs: " << &resized_column << std::endl;
     }
 
     std::vector<MPI_Datatype> recv_types(num_proc);
     for (int i = 0; i < num_proc; ++i) {
-        // MPI_Type_create_resized(
-        //     column_vector,      // MPI_Datatype old_datatype,
-        //     lb,                 // MPI_Aint lower_bound,
-        //     sizeof(int),        // MPI_Aint extent,
-        //     &recv_types[i]      // MPI_Datatype* new_datatype);
-        // );
-        // MPI_Type_commit(&recv_types[i]);
-
-        recv_types[i] = resized_column;
-
-        MPI_Aint lb, ex, true_extent;
-        MPI_Type_get_true_extent(recv_types[i], &lb, &true_extent);
-        
-        MPI_Type_get_extent(recv_types[i], &lb, &ex);
-
+        // As I use alltoallw i can use a datatype per process so i make contigous datatype of all columns and set recivecount to 1.
+        MPI_Type_contiguous(
+            rows_cols_per_proccess[i],  //count
+            resized_column,             //basetype
+            &recv_types[i]
+        );
+        MPI_Type_commit(&recv_types[i]);
+    
         if (DDBUG && myid == ROOT){
-            std::cout << myid << ": " << "recv lb: " << lb << "  recv ex: " << ex << "  true ex: " << true_extent << std::endl;
+            MPI_Aint lb, extent, true_extent;
+            MPI_Type_get_true_extent(recv_types[i], &lb, &true_extent);
+            MPI_Type_get_extent(recv_types[i], &lb, &extent);
+            std::cout << myid << ": " << "recv lb: " << lb << "  recv exextent: " << extent << "  true extent: " << true_extent << std::endl;
             std::cout << myid << ": " << "recv addrs: " << &recv_types[i] << std::endl;
         }
     }
+    MPI_Type_free (&resized_column);
 
     // Setup remaining Alltoallw data
     std::vector<int> send_counts(num_proc);
@@ -391,15 +366,16 @@ void global_sort(matrix2D *elements, int first_row_index) {
     std::vector<int> recv_counts(num_proc);
     std::vector<int> recv_displs(num_proc);
 
+    // Recive buffer
     matrix2D transpose_buffer(elements->nrOfRows, elements->nrOfCols);
 
     for (int i = 0; i < num_proc; ++i) {
-        send_counts[i] = 1;                             // just one vector type
+        send_counts[i] = 1;                         // just one vector type
         send_displs[i] = displs[i] * sizeof(int);   // byte-offset as we use MPI_Alltoallw
-        recv_counts[i] = rows_cols_per_proccess[i];     // just one contigious type
+        recv_counts[i] = 1;                         // just one contigious type
         recv_displs[i] = displs[i] * sizeof(int);   // same displacement in send and receive        
         if (DDBUG && myid == ROOT)
-            std::cout << myid << ": " << "displacement: " << lb << recv_displs[i] << std::endl;    
+            std::cout << myid << ": " << "displacement: " << recv_displs[i] << std::endl;    
     }
 
     // Calculate nr of steps
@@ -438,8 +414,6 @@ void global_sort(matrix2D *elements, int first_row_index) {
         }
 
         if (i < col_steps){
-            // Exchange and transpose matrix and then sort columns
-            // Transpose to treat columns as rows
             if (DDBUG){
                 if (myid == ROOT){
                     std::cout << myid << ": " << "Before Alltoallw" << std::endl; 
@@ -456,6 +430,9 @@ void global_sort(matrix2D *elements, int first_row_index) {
                     
                 }
             }
+
+            // Exchange and transpose matrix and then sort columns
+            // Transpose to store data in columnmajor order in transpose_buffer
             MPI_Alltoallw(
                 elements->data.data(), send_counts.data(), send_displs.data(), send_types.data(),
                 transpose_buffer.data.data(), recv_counts.data(), recv_displs.data(), recv_types.data(),
@@ -469,6 +446,7 @@ void global_sort(matrix2D *elements, int first_row_index) {
                 }
             }
             
+            // Sort each column
             for (int col = 0; col < (int)transpose_buffer.nrOfRows; col++){
                 std::sort(transpose_buffer.data.begin() + global_dim * col, transpose_buffer.data.begin() + global_dim * (col+1));
             }
@@ -492,10 +470,8 @@ void global_sort(matrix2D *elements, int first_row_index) {
     // Cleanup resources
     for (int i = 0; i < num_proc; ++i) {
         MPI_Type_free (&send_types[i]);
-        // MPI_Type_free (&recv_types[i]);
+        MPI_Type_free (&recv_types[i]);
     }
-    MPI_Type_free (&resized_column);
-    MPI_Type_free (&column_vector);
 }
 
 void gather_on_root(matrix2D *all_elements, matrix2D *local_elements){

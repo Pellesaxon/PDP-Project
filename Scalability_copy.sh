@@ -4,35 +4,28 @@
 #SBATCH -A uppmax2025-3-7
 #SBATCH -N 3
 #SBATCH -p node
-#SBATCH -n 25
+#SBATCH -n 32
 #SBATCH --time=01:00:00
-#SBATCH --error=job.weak.err
-#SBATCH --output=job.weak.out
+#SBATCH --error=job.trad_strong.err
+#SBATCH --output=job.trad_strong.out
 
 ml gcc/14.2.0 openmpi/5.0.5
 
-processesArr=(1 4 9 16 25)
-inputArr=(2000 4000 6000 8000 10000)
-# inputArr=(1000 1000 1000 1000 1000)
-
+processesArr=(1 2 4 8 16 32)
+input=(8000)
+          
 runs_per_instance=5
 
-length=${#processesArr[@]}
-
 # Loop through scenarios
-for (( i=0; i<length; i++ )); do
-    input=${inputArr[$i]}
-    process=${processesArr[$i]}
-
+for process in "${processesArr[@]}"; do
     times=()
-    for (( run=1; run<=runs_per_instance; run++ )); do
-        # Run quicksort and capture its time output
+    for i in $(seq 1 $runs_per_instance); do
         output=$(mpirun -np $process --bind-to none ./shearsort $input output_test.txt 2>&1)
-        # Extract the numeric time
+        # Extract the numeric time after "TIME: "
         runtime=$(echo "$output" | grep -oP 'TIME: \K[0-9]+\.[0-9]+' )
         times+=("$runtime")
     done
-
+    
     # Compute median inline
     sorted=($(printf "%s\n" "${times[@]}" | sort -n))
     n=${#sorted[@]}
@@ -47,5 +40,5 @@ for (( i=0; i<length; i++ )); do
 
     echo "Scenario=$input, Processes=$process, MedianRuntime=${median}s"
 done
-
+echo 
 echo "All executions finished."
