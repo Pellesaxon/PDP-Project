@@ -1,0 +1,73 @@
+executions 
+
+STRONG
+
+2 NODES Strong scaling 
+[oskarp@rackham2 Project]$ cat job.strong.out
+Scenario=8000, Processes=1, MedianRuntime=73.8871s
+Scenario=8000, Processes=4, MedianRuntime=19.1991s
+Scenario=8000, Processes=9, MedianRuntime=9.01026s
+Scenario=8000, Processes=16, MedianRuntime=7.57344s
+Scenario=8000, Processes=25, MedianRuntime=9.64245s
+
+
+3 NODES Strong scaling
+[oskarp@rackham2 Project]$ cat job.trad_strong.out
+Scenario=8000, Processes=1, MedianRuntime=73.6798s
+Scenario=8000, Processes=2, MedianRuntime=41.2932s
+Scenario=8000, Processes=4, MedianRuntime=19.1554s
+Scenario=8000, Processes=8, MedianRuntime=9.85405s
+Scenario=8000, Processes=16, MedianRuntime=8.7318s
+Scenario=8000, Processes=32, MedianRuntime=9.36456s
+
+
+4 NODES Strong scaling
+Scenario=8000, Processes=1, MedianRuntime=73.7699s
+Scenario=8000, Processes=2, MedianRuntime=41.6794s
+Scenario=8000, Processes=4, MedianRuntime=19.1664s
+Scenario=8000, Processes=8, MedianRuntime=9.83767s
+Scenario=8000, Processes=16, MedianRuntime=9.04299s
+Scenario=8000, Processes=32, MedianRuntime=10.1485s
+
+
+8 NODES Strong scaling
+Scenario=8000, Processes=1, MedianRuntime=74.2064s
+Scenario=8000, Processes=2, MedianRuntime=41.3671s
+Scenario=8000, Processes=4, MedianRuntime=19.1179s
+Scenario=8000, Processes=8, MedianRuntime=11.8615s
+Scenario=8000, Processes=16, MedianRuntime=9.03878s
+Scenario=8000, Processes=32, MedianRuntime=10.1651s
+
+All executions finished.
+
+
+
+WEAK
+
+2 NODES Weak scaling 
+[oskarp@rackham2 Project]$ cat job.weak.out
+Scenario=2000, Processes=1, MedianRuntime=3.029s
+Scenario=4000, Processes=4, MedianRuntime=3.86585s
+Scenario=6000, Processes=9, MedianRuntime=4.67439s
+Scenario=8000, Processes=16, MedianRuntime=7.57809s
+Scenario=10000, Processes=25, MedianRuntime=12.7335s
+
+
+
+3 NODES Weak scaling 
+[oskarp@rackham2 Project]$ cat job.weak.out
+Scenario=2000, Processes=1, MedianRuntime=3.04243s
+Scenario=4000, Processes=4, MedianRuntime=3.86201s
+Scenario=6000, Processes=9, MedianRuntime=4.66161s
+Scenario=8000, Processes=16, MedianRuntime=9.03549s
+Scenario=10000, Processes=25, MedianRuntime=13.3102s
+
+
+
+4 NODES Weak scaling 
+[oskarp@rackham2 Project]$ cat job.weak_4.out
+Scenario=2000, Processes=1, MedianRuntime=3.03787s
+Scenario=4000, Processes=4, MedianRuntime=3.85737s
+Scenario=6000, Processes=9, MedianRuntime=6.23369s
+Scenario=8000, Processes=16, MedianRuntime=8.75718s
+Scenario=10000, Processes=25, MedianRuntime=12.2281s

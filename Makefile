@@ -16,7 +16,7 @@ clean:
 
 
 run: shearsort
-	mpirun -np 1 ./shearsort input/input8.txt testoutput8.txt
+	mpirun -np 2 ./shearsort input/input8.txt testoutput8.txt
 
 test: shearsort
 	mpirun -np 2 ./shearsort input/input15.txt testoutput15.txt
