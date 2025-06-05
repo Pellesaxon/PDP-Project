@@ -53,6 +53,6 @@ $ make test
 ## Credits
 
 - [Oskar Perers - author][link-author]
-- Peer reviewed by Adam Ross
+- Peer reviewed by [Adam Ross](https://github.com/r055a)
 
 [link-author]: https://github.com/Pellesaxon/
